@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 type LtvEntry = {
   objectId: number
   ltvId?: number | null
@@ -24,6 +26,9 @@ type LtvEntry = {
   vehiculeTete?: string | null
   typeTrain?: string | null
   typeTrainObs?: string | null
+
+  _vatardFields?: Set<string>
+  _vatardMatched?: boolean
 }
 
 type LtvTableProps = {
@@ -48,6 +53,10 @@ function formatAdifDate(value?: number | string | null): string {
 
 function checkSi(value?: string | null): string {
   return String(value ?? "").trim().toLowerCase() === "si" ? "✓" : ""
+}
+
+function vatardStyle(row: LtvEntry, field: string): CSSProperties | undefined {
+  return row._vatardFields?.has(field) ? { color: "#2563eb" } : undefined
 }
 
 export default function LtvTable({ title, rows, muted = false }: LtvTableProps) {
@@ -156,7 +165,8 @@ export default function LtvTable({ title, rows, muted = false }: LtvTableProps) 
         col.ltv-col-small-f   { width: 6.03%; }
         col.ltv-col-solo      { width: 3.13%; }
         col.ltv-col-csv-narrow { width: 2.34%; }
-        col.ltv-col-csv       { width: 15.85%; }
+        col.ltv-col-csv       { width: 13.85%; }
+        col.ltv-col-source    { width: 2%; }
       `}</style>
 
       <table className="ltv-table">
@@ -178,6 +188,7 @@ export default function LtvTable({ title, rows, muted = false }: LtvTableProps) 
           <col className="ltv-col-solo" />
           <col className="ltv-col-csv-narrow" />
           <col className="ltv-col-csv" />
+          <col className="ltv-col-source" />
         </colgroup>
 
         <thead>
@@ -221,6 +232,9 @@ export default function LtvTable({ title, rows, muted = false }: LtvTableProps) 
             </th>
 
             <th className="ltv-th" rowSpan={2}>Observaciones</th>
+            <th className="ltv-th vert" rowSpan={2}>
+              <div className="vert-shell"><span className="vert-label">Src.</span></div>
+            </th>
           </tr>
 
           <tr>
@@ -243,7 +257,7 @@ export default function LtvTable({ title, rows, muted = false }: LtvTableProps) 
               <td className="ltv-td">{formatPk(row.pkDebut)}</td>
               <td className="ltv-td">{formatPk(row.pkFin)}</td>
               <td className="ltv-td">{row.vitesse}</td>
-              <td className="ltv-td" style={{ textAlign: "left" }}>{row.motif}</td>
+              <td className="ltv-td" style={{ textAlign: "left", ...vatardStyle(row, "motif") }}>{row.motif}</td>
               <td className="ltv-td">{formatAdifDate(row.dateDebutVigueur)}</td>
               <td className="ltv-td">{row.heureDebutVigueur ?? ""}</td>
               <td className="ltv-td">{formatAdifDate(row.dateFinPrevue)}</td>
@@ -251,9 +265,12 @@ export default function LtvTable({ title, rows, muted = false }: LtvTableProps) 
               <td className="ltv-td">{checkSi(row.nonSignaleeVoie)}</td>
               <td className="ltv-td">{checkSi(row.nonSignaleeSysteme)}</td>
               <td className="ltv-td">{checkSi(row.vehiculeTete)}</td>
-              <td className="ltv-td">{checkSi(row.csv)}</td>
-              <td className="ltv-td" style={{ textAlign: "left", whiteSpace: "pre-line" }}>
+              <td className="ltv-td" style={vatardStyle(row, "csv")}>{checkSi(row.csv)}</td>
+              <td className="ltv-td" style={{ textAlign: "left", whiteSpace: "pre-line", ...vatardStyle(row, "observations") }}>
                 {[row.observations, row.typeTrainObs].filter(Boolean).join("\n")}
+              </td>
+              <td className="ltv-td" style={{ color: row._vatardMatched ? "#16a34a" : "#9ca3af", fontWeight: 700 }}>
+                {row._vatardMatched ? "A+V" : "A"}
               </td>
             </tr>
           ))}
