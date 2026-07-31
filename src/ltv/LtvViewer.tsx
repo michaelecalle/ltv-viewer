@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { parseLtvPdf2026 } from "./ltvPdfParser";
 import { fetchCurrentLtv, publishLtvPdfResult } from "./ltvApi";
 import {
-  formatLtvDateTimeForDisplay,
   isRouteRelevant,
   readLtvFileInfo,
   readLtvRowsFromFile,
@@ -96,6 +95,17 @@ const TABLE_CSS = `
 
 const check = (v: boolean) => (v ? "✓" : "");
 
+// Format d'actualisation identique à l'app LIM : "3 juin 2026 à 15h00".
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+function formatLtvUpdateDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${d.getDate()} ${MOIS[d.getMonth()]} ${d.getFullYear()} à ${hh}h${mm}`;
+}
+
 function Row({ r, idx }: { r: LtvRow; idx: number }) {
   return (
     <tr key={r.code + "_" + idx}>
@@ -163,9 +173,8 @@ export default function LtvViewer() {
   }, []);
 
   const routeRows = rows.filter(isRouteRelevant);
-  const caption =
-    `LTV du parcours (PK ≥ 616) — ${routeRows.length} LTV` +
-    (fileInfo && fileInfo.publishedAt ? ` · Publié le ${formatLtvDateTimeForDisplay(fileInfo.publishedAt)}` : "");
+  const updateDate = fileInfo ? formatLtvUpdateDate(fileInfo.publishedAt) : "";
+  const caption = `${routeRows.length} LTV` + (updateDate ? ` - Actualisées le ${updateDate}` : "");
 
   return (
     <div style={{ maxWidth: 1400, margin: "0 auto", padding: 12, fontFamily: "system-ui, sans-serif" }}>
