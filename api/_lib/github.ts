@@ -71,7 +71,9 @@ export async function githubGetFile(path: string): Promise<{ content: string; sh
   return { content: Buffer.from(json.content, "base64").toString("utf-8"), sha: json.sha };
 }
 
-export async function githubGetFileSha(path: string): Promise<string | null> {
+// Métadonnées d'un fichier existant : sha (pour écraser) + size (octets, pour la
+// dédup). Renvoie null si le fichier n'existe pas encore (404).
+export async function githubGetFileMeta(path: string): Promise<{ sha: string; size: number } | null> {
   const { branch } = getGithubConfig();
   const url = new URL(apiUrl(path));
   url.searchParams.set("ref", branch);
@@ -80,8 +82,14 @@ export async function githubGetFileSha(path: string): Promise<string | null> {
   if (response.status === 404) return null;
   if (!response.ok) await fail(response);
 
-  const json = (await response.json()) as { sha?: string };
-  return json.sha ?? null;
+  const json = (await response.json()) as { sha?: string; size?: number };
+  if (!json.sha) return null;
+  return { sha: json.sha, size: typeof json.size === "number" ? json.size : -1 };
+}
+
+export async function githubGetFileSha(path: string): Promise<string | null> {
+  const meta = await githubGetFileMeta(path);
+  return meta?.sha ?? null;
 }
 
 export async function githubPutFile(

@@ -1,5 +1,5 @@
 import { LigneFtValidationError } from "./errors.js";
-import { githubGetFile, githubGetFileSha, githubPutFile, githubPutFileBase64 } from "./github.js";
+import { githubGetFile, githubGetFileMeta, githubGetFileSha, githubPutFile, githubPutFileBase64 } from "./github.js";
 
 // Fichier LTV canonique UNIQUE, partagé : lu par l'app cabine (runtime), l'éditeur
 // et ce viewer ; écrit ici quand un PDF est importé dans le viewer.
@@ -77,16 +77,24 @@ export async function readLtvCurrentFromLogs(): Promise<unknown> {
 
 // Dépose le PDF source LTV (fourni en base64) à côté du normalisé. « Le plus récent
 // gagne » : on récupère le sha existant et on écrase. Non bloquant côté appelant.
-export async function publishLtvSourcePdfToLogs(base64Pdf: unknown): Promise<{ path: string }> {
+export async function publishLtvSourcePdfToLogs(
+  base64Pdf: unknown
+): Promise<{ path: string; skipped: boolean }> {
   if (typeof base64Pdf !== "string" || base64Pdf.trim() === "") {
     throw new LigneFtValidationError("Le PDF source LTV (base64) est requis.");
   }
-  const existingSha = await githubGetFileSha(LTV_CURRENT_PDF_LOGS_PATH);
+  const newSize = Buffer.from(base64Pdf, "base64").length;
+  const existing = await githubGetFileMeta(LTV_CURRENT_PDF_LOGS_PATH);
+  // Dédup simple : si le PDF existant a exactement la même taille, on considère
+  // que c'est le même fichier et on n'écrase pas (évite un commit inutile).
+  if (existing && existing.size === newSize) {
+    return { path: LTV_CURRENT_PDF_LOGS_PATH, skipped: true };
+  }
   const result = await githubPutFileBase64(
     LTV_CURRENT_PDF_LOGS_PATH,
     base64Pdf,
     "Import PDF source LTV depuis le viewer",
-    existingSha ?? undefined
+    existing?.sha ?? undefined
   );
-  return { path: result.path };
+  return { path: result.path, skipped: false };
 }
