@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseLtvPdf2026 } from "./ltvPdfParser";
-import { fetchCurrentLtv, publishLtvPdfResult } from "./ltvApi";
+import { fetchCurrentLtv, publishLtvPdfResult, publishLtvSourcePdf } from "./ltvApi";
 import {
   isRouteRelevant,
   readLtvFileInfo,
@@ -130,6 +130,18 @@ function Row({ r, idx }: { r: LtvRow; idx: number }) {
   );
 }
 
+// File binaire → base64 (par chunks : String.fromCharCode(...tout) déborderait la pile
+// sur un gros PDF).
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
 export default function LtvViewer() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string>("Chargement des LTV en cours…");
@@ -164,6 +176,11 @@ export default function LtvViewer() {
       setRows(readLtvRowsFromFile(normalized));
       setFileInfo(readLtvFileInfo(normalized));
       const result = await publishLtvPdfResult(normalized);
+      // Déposer aussi le PDF source LTV (pour l'affichage en mode secours de LIM).
+      // Non bloquant : l'import est déjà réussi, ce dépôt est best-effort.
+      void fileToBase64(file)
+        .then((b64) => publishLtvSourcePdf(b64))
+        .catch(() => {});
       setStatus("success");
       setMessage(`${result.rowCount} LTV importées. Fichier partagé mis à jour.`);
     } catch (error) {

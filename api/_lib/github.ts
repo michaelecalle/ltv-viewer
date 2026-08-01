@@ -90,6 +90,19 @@ export async function githubPutFile(
   message: string,
   sha?: string
 ): Promise<{ path: string; sha: string }> {
+  // Contenu texte (UTF-8) → base64. Pour du binaire, utiliser githubPutFileBase64.
+  return githubPutFileBase64(path, Buffer.from(content, "utf-8").toString("base64"), message, sha);
+}
+
+// Écrit un fichier dont le contenu est DÉJÀ en base64 (binaire : PDF, images…).
+// L'API GitHub Contents attend le contenu en base64 ; ici on ne ré-encode PAS en
+// UTF-8 (ce qui corromprait les octets d'un PDF).
+export async function githubPutFileBase64(
+  path: string,
+  base64Content: string,
+  message: string,
+  sha?: string
+): Promise<{ path: string; sha: string }> {
   const { branch } = getGithubConfig();
 
   const response = await fetch(apiUrl(path), {
@@ -97,7 +110,7 @@ export async function githubPutFile(
     headers: headers(),
     body: JSON.stringify({
       message,
-      content: Buffer.from(content, "utf-8").toString("base64"),
+      content: base64Content,
       branch,
       ...(sha ? { sha } : {}),
     }),

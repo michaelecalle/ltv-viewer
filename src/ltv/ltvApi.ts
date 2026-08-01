@@ -55,3 +55,17 @@ export async function publishLtvPdfResult(data: NormalizedLtvFile): Promise<Publ
   }
   return payload as PublishLtvResponse;
 }
+
+// Dépose le PDF SOURCE LTV (base64) à côté du normalisé, pour l'affichage en mode
+// secours de LIM. Non bloquant : on ignore les erreurs (best-effort).
+export async function publishLtvSourcePdf(pdfBase64: string): Promise<void> {
+  try {
+    await fetch("/api/ltv/publish-current-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ pdfBase64 }),
+    });
+  } catch {
+    // best-effort : l'import LTV reste réussi même si le dépôt du PDF échoue.
+  }
+}

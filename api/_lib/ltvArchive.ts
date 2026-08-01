@@ -1,9 +1,13 @@
 import { LigneFtValidationError } from "./errors.js";
-import { githubGetFile, githubGetFileSha, githubPutFile } from "./github.js";
+import { githubGetFile, githubGetFileSha, githubPutFile, githubPutFileBase64 } from "./github.js";
 
 // Fichier LTV canonique UNIQUE, partagé : lu par l'app cabine (runtime), l'éditeur
 // et ce viewer ; écrit ici quand un PDF est importé dans le viewer.
 const LTV_CURRENT_LOGS_PATH = "ltv-normalized/current.json";
+
+// PDF SOURCE LTV, déposé À CÔTÉ du normalisé. L'app cabine (LIM) l'affiche en mode
+// secours (bascule fiche train ↔ LTV). Toujours « le plus récent ».
+const LTV_CURRENT_PDF_LOGS_PATH = "ltv-normalized/current.pdf";
 
 type LtvNormalizedPayload = {
   meta: { line: string; publishedAt?: string; adif?: unknown };
@@ -69,4 +73,20 @@ export async function publishLtvCurrentToLogs(
 export async function readLtvCurrentFromLogs(): Promise<unknown> {
   const file = await githubGetFile(LTV_CURRENT_LOGS_PATH);
   return JSON.parse(file.content);
+}
+
+// Dépose le PDF source LTV (fourni en base64) à côté du normalisé. « Le plus récent
+// gagne » : on récupère le sha existant et on écrase. Non bloquant côté appelant.
+export async function publishLtvSourcePdfToLogs(base64Pdf: unknown): Promise<{ path: string }> {
+  if (typeof base64Pdf !== "string" || base64Pdf.trim() === "") {
+    throw new LigneFtValidationError("Le PDF source LTV (base64) est requis.");
+  }
+  const existingSha = await githubGetFileSha(LTV_CURRENT_PDF_LOGS_PATH);
+  const result = await githubPutFileBase64(
+    LTV_CURRENT_PDF_LOGS_PATH,
+    base64Pdf,
+    "Import PDF source LTV depuis le viewer",
+    existingSha ?? undefined
+  );
+  return { path: result.path };
 }
