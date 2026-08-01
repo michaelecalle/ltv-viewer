@@ -1,5 +1,5 @@
 import { LigneFtValidationError } from "./errors.js";
-import { githubGetFile, githubGetFileMeta, githubGetFileSha, githubPutFile, githubPutFileBase64 } from "./github.js";
+import { githubGetFile, githubGetFileMeta, githubPutFile, githubPutFileBase64, githubTryGetFile } from "./github.js";
 
 // Fichier LTV canonique UNIQUE, partagé : lu par l'app cabine (runtime), l'éditeur
 // et ce viewer ; écrit ici quand un PDF est importé dans le viewer.
@@ -47,7 +47,7 @@ function normalizeWarnings(warnings: unknown[] | undefined): string[] {
 
 export async function publishLtvCurrentToLogs(
   data: unknown
-): Promise<{ path: string; publishedAt: string; rowCount: number; warnings: string[] }> {
+): Promise<{ path: string; publishedAt: string; rowCount: number; warnings: string[]; written: boolean }> {
   assertValid(data);
 
   // On préserve meta.publishedAt (date de vigueur du PDF, posée par le parseur).
@@ -57,17 +57,37 @@ export async function publishLtvCurrentToLogs(
       : new Date().toISOString();
 
   const warnings = normalizeWarnings(data.warnings);
-  const nextContent = `${JSON.stringify({ ...data, warnings }, null, 2)}\n`;
 
-  const existingSha = await githubGetFileSha(LTV_CURRENT_LOGS_PATH);
+  // « Le plus récent par DATE DE CONTENU (Fecha Vigor) gagne », pas le plus récemment
+  // envoyé. On ne réécrit que si la date entrante est STRICTEMENT plus récente que
+  // celle du normalisé déjà stocké (ou s'il n'y en a pas encore).
+  const existing = await githubTryGetFile(LTV_CURRENT_LOGS_PATH);
+  let existingSha: string | undefined;
+  if (existing) {
+    existingSha = existing.sha;
+    const newDate = Date.parse(publishedAt) || 0;
+    let existingDate = 0;
+    try {
+      const parsed = JSON.parse(existing.content) as { meta?: { publishedAt?: string } };
+      existingDate = Date.parse(parsed?.meta?.publishedAt ?? "") || 0;
+    } catch {
+      existingDate = 0;
+    }
+    if (newDate > 0 && existingDate > 0 && newDate <= existingDate) {
+      // Déjà à jour (ou plus ancien) → on n'écrase pas.
+      return { path: LTV_CURRENT_LOGS_PATH, publishedAt, rowCount: data.rows.length, warnings, written: false };
+    }
+  }
+
+  const nextContent = `${JSON.stringify({ ...data, warnings }, null, 2)}\n`;
   const result = await githubPutFile(
     LTV_CURRENT_LOGS_PATH,
     nextContent,
     "Import LTV depuis le viewer (PDF)",
-    existingSha ?? undefined
+    existingSha
   );
 
-  return { path: result.path, publishedAt, rowCount: data.rows.length, warnings };
+  return { path: result.path, publishedAt, rowCount: data.rows.length, warnings, written: true };
 }
 
 export async function readLtvCurrentFromLogs(): Promise<unknown> {
@@ -75,19 +95,20 @@ export async function readLtvCurrentFromLogs(): Promise<unknown> {
   return JSON.parse(file.content);
 }
 
-// Dépose le PDF source LTV (fourni en base64) à côté du normalisé. « Le plus récent
-// gagne » : on récupère le sha existant et on écrase. Non bloquant côté appelant.
+// Dépose le PDF source LTV (base64) à côté du normalisé. Il SUIT la décision de date
+// du normalisé : `force` = le normalisé vient d'être (ré)écrit car sa Fecha Vigor est
+// plus récente. On écrit le PDF si `force` OU s'il n'existe pas encore (rattrapage).
+// Sinon on n'y touche pas → « le plus récent par date de contenu » reste en place.
 export async function publishLtvSourcePdfToLogs(
-  base64Pdf: unknown
+  base64Pdf: unknown,
+  opts: { force: boolean }
 ): Promise<{ path: string; skipped: boolean }> {
   if (typeof base64Pdf !== "string" || base64Pdf.trim() === "") {
     throw new LigneFtValidationError("Le PDF source LTV (base64) est requis.");
   }
-  const newSize = Buffer.from(base64Pdf, "base64").length;
   const existing = await githubGetFileMeta(LTV_CURRENT_PDF_LOGS_PATH);
-  // Dédup simple : si le PDF existant a exactement la même taille, on considère
-  // que c'est le même fichier et on n'écrase pas (évite un commit inutile).
-  if (existing && existing.size === newSize) {
+  if (!opts.force && existing) {
+    // Le normalisé n'a pas changé et le PDF est déjà là → rien à faire.
     return { path: LTV_CURRENT_PDF_LOGS_PATH, skipped: true };
   }
   const result = await githubPutFileBase64(

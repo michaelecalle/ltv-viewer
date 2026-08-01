@@ -16,9 +16,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 // du normalisé. L'app cabine (LIM) l'affiche en mode secours. Non bloquant côté viewer.
 export async function POST(request: Request): Promise<Response> {
   try {
-    let body: { pdfBase64?: unknown };
+    let body: { pdfBase64?: unknown; force?: unknown };
     try {
-      body = (await request.json()) as { pdfBase64?: unknown };
+      body = (await request.json()) as { pdfBase64?: unknown; force?: unknown };
     } catch {
       return jsonResponse({ ok: false, error: { code: "INVALID_REQUEST", message: "Invalid JSON body" } }, 400);
     }
@@ -30,8 +30,9 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const result = await publishLtvSourcePdfToLogs(body.pdfBase64);
-    return jsonResponse({ ok: true, path: result.path });
+    // force = le normalisé vient d'être (ré)écrit car plus récent (transmis par le client).
+    const result = await publishLtvSourcePdfToLogs(body.pdfBase64, { force: body.force === true });
+    return jsonResponse({ ok: true, path: result.path, skipped: result.skipped });
   } catch (error) {
     if (error instanceof LigneFtValidationError) {
       return jsonResponse(

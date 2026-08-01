@@ -177,12 +177,17 @@ export default function LtvViewer() {
       setFileInfo(readLtvFileInfo(normalized));
       const result = await publishLtvPdfResult(normalized);
       // Déposer aussi le PDF source LTV (pour l'affichage en mode secours de LIM).
+      // Il suit la décision de date du normalisé : force = result.written.
       // Non bloquant : l'import est déjà réussi, ce dépôt est best-effort.
       void fileToBase64(file)
-        .then((b64) => publishLtvSourcePdf(b64))
+        .then((b64) => publishLtvSourcePdf(b64, result.written))
         .catch(() => {});
       setStatus("success");
-      setMessage(`${result.rowCount} LTV importées. Fichier partagé mis à jour.`);
+      setMessage(
+        result.written
+          ? `${result.rowCount} LTV importées. Fichier partagé mis à jour.`
+          : `${result.rowCount} LTV importées. Le fichier partagé conserve une version plus récente (non remplacé).`
+      );
     } catch (error) {
       setStatus("error");
       setMessage(`Import du PDF LTV échoué : ${error instanceof Error ? error.message : "erreur inconnue"}`);

@@ -37,6 +37,7 @@ export async function POST(request: Request): Promise<Response> {
       publishedAt: result.publishedAt,
       rowCount: result.rowCount,
       warnings: result.warnings,
+      written: result.written,
     });
   } catch (error) {
     if (error instanceof LigneFtValidationError) {

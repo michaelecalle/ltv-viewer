@@ -71,6 +71,22 @@ export async function githubGetFile(path: string): Promise<{ content: string; sh
   return { content: Buffer.from(json.content, "base64").toString("utf-8"), sha: json.sha };
 }
 
+// Lecture tolérante au 404 : renvoie {content, sha} ou null si le fichier n'existe pas
+// encore. Sert à lire la Fecha Vigor (meta.publishedAt) du normalisé existant.
+export async function githubTryGetFile(path: string): Promise<{ content: string; sha: string } | null> {
+  const { branch } = getGithubConfig();
+  const url = new URL(apiUrl(path));
+  url.searchParams.set("ref", branch);
+
+  const response = await fetch(url.toString(), { method: "GET", headers: headers(), cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) await fail(response);
+
+  const json = (await response.json()) as { type: string; encoding: string; content: string; sha: string };
+  if (json.type !== "file" || json.encoding !== "base64") return null;
+  return { content: Buffer.from(json.content, "base64").toString("utf-8"), sha: json.sha };
+}
+
 // Métadonnées d'un fichier existant : sha (pour écraser) + size (octets, pour la
 // dédup). Renvoie null si le fichier n'existe pas encore (404).
 export async function githubGetFileMeta(path: string): Promise<{ sha: string; size: number } | null> {
